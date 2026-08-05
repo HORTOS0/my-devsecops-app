@@ -30,6 +30,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Lancer les tests et generer la couverture
+        run: npm test
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v3
         env:
@@ -48,6 +59,14 @@ jobs:
     steps:
       - name: Checkout du code source
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer les dependances
+        run: npm ci
 
       - name: OWASP Dependency-Check Scan
         uses: dependency-check/Dependency-Check_Action@main
@@ -94,7 +113,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          aws-region: eu-west-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login AWS ECR
         id: login-ecr
@@ -133,7 +152,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: /home/ali/trivy-results.sarif
+          sarif_file: trivy-results.sarif
 
       - name: Push image vers ECR
         env:
@@ -158,12 +177,12 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          aws-region: eu-west-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login AWS ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Récupérer la task definition ECS
+      - name: Recuperer la task definition ECS
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_SERVICE }} \
@@ -178,7 +197,7 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ needs.build-and-push.outputs.image }}
 
-      - name: Déployer sur ECS Staging
+      - name: Deployer sur ECS Staging
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
@@ -187,7 +206,7 @@ jobs:
           wait-for-service-stability: true
           wait-for-minutes: 10
 
-      - name: Récupérer URL staging
+      - name: Recuperer URL staging
         id: get-url
         run: |
           TASK_ARN=$(aws ecs list-tasks \
@@ -234,20 +253,20 @@ jobs:
       - name: Configurer credentials AWS Production
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          aws-region: eu-west-1
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_PROD_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login AWS ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Récupérer task definition Production
+      - name: Recuperer task definition Production
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_SERVICE }}-prod \
             --query taskDefinition \
             > task-definition-prod.json
 
-      - name: Injecter image validée en prod
+      - name: Injecter image validee en prod
         id: task-def-prod
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -255,7 +274,7 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ needs.build-and-push.outputs.image }}
 
-      - name: Déployer en Production
+      - name: Deployer en Production
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def-prod.outputs.task-definition }}
