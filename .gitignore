@@ -1,0 +1,38 @@
+# Credentials AWS — NE JAMAIS COMMITER
+.aws/
+
+# Dépendances Node.js
+node_modules/
+
+# Rapports de tests
+coverage/
+
+# Fichiers secrets
+.env
+.env.*
+
+# Fichiers d'installation AWS
+awscliv2.zip
+aws/
+
+# Cache Trivy
+.cache/
+
+# Fichiers volumineux
+*.zip
+*.tar.gz
+*.db
+
+# Historique terminal
+.bash_history
+.bash_profile
+.bashrc
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+.git-credentials

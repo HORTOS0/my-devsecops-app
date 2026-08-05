@@ -1,0 +1,8 @@
+node_modules // sera réinstallé proprement dans le conteneur — inutile de le copier
+.env // JAMAIS copier les fichiers secrets dans l'image
+.env.* 
+.git // l'historique Git (lourd et inutile dans l'image)
+tests/ // les tests ne servent pas en production
+*.md // la documentation non plus
+.github/ // les workflows GitHub Actions non plus
+coverage/ // les rapports de tests non plus

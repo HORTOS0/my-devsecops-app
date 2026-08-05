@@ -1,0 +1,264 @@
+name: DevSecOps Pipeline — AWS ECS
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: my-app
+  ECS_CLUSTER: my-cluster
+  ECS_SERVICE: my-app-service
+  CONTAINER_NAME: my-app
+  IMAGE_TAG: ${{ github.sha }}
+
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
+
+jobs:
+
+  sast-sonarqube:
+    name: "SAST — SonarQube"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate Check
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  sca-dependency-check:
+    name: "SCA — OWASP Dependency-Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+
+      - name: OWASP Dependency-Check Scan
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.event.repository.name }}
+          path: .
+          format: SARIF
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Upload rapport SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+
+  secrets-scan:
+    name: "Secrets Scanning — Gitleaks"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-push:
+    name: "Build Docker + Trivy + Push ECR"
+    runs-on: ubuntu-latest
+    needs: [sast-sonarqube, sca-dependency-check, secrets-scan]
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+
+      - name: Configurer credentials AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Login AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Hadolint — Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+      - name: Build image Docker
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build \
+            --no-cache \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Trivy — Scan image Docker
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.build-image.outputs.image }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: /home/ali/trivy-results.sarif
+
+      - name: Push image vers ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy-staging:
+    name: "Deploy — Staging ECS"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment:
+      name: staging
+    outputs:
+      staging_url: ${{ steps.get-url.outputs.staging_url }}
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+
+      - name: Configurer credentials AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Login AWS ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Récupérer la task definition ECS
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE }} \
+            --query taskDefinition \
+            > task-definition-current.json
+
+      - name: Injecter la nouvelle image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-current.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.image }}
+
+      - name: Déployer sur ECS Staging
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}-staging
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Récupérer URL staging
+        id: get-url
+        run: |
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_SERVICE }}-staging \
+            --query 'taskArns[0]' --output text)
+          ENI_ID=$(aws ecs describe-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
+            --output text)
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids $ENI_ID \
+            --query 'NetworkInterfaces[0].Association.PublicIp' \
+            --output text)
+          echo "staging_url=http://$PUBLIC_IP:3000" >> $GITHUB_OUTPUT
+
+  dast-owasp-zap:
+    name: "DAST — OWASP ZAP"
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+
+      - name: OWASP ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.10.0
+        with:
+          target: ${{ needs.deploy-staging.outputs.staging_url }}
+          fail_action: true
+          artifact_name: zap-report
+
+  deploy-production:
+    name: "Deploy — Production ECS"
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, dast-owasp-zap]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v4
+
+      - name: Configurer credentials AWS Production
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Login AWS ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Récupérer task definition Production
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE }}-prod \
+            --query taskDefinition \
+            > task-definition-prod.json
+
+      - name: Injecter image validée en prod
+        id: task-def-prod
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-prod.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.image }}
+
+      - name: Déployer en Production
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-prod.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}-prod
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
