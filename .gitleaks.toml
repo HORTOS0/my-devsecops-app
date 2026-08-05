@@ -1,0 +1,5 @@
+[allowlist]
+  description = "Faux positifs connus"
+  paths = [
+    "sonar-project.properties"
+  ]
