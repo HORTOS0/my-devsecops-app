@@ -109,10 +109,11 @@ jobs:
       - name: Checkout du code source
         uses: actions/checkout@v4
 
-      - name: Configurer credentials AWS (OIDC)
+      - name: Configurer credentials AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login AWS ECR
