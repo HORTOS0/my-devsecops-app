@@ -120,11 +120,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Hadolint — Lint Dockerfile
+      - name: Hadolint — Verification du Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
-          failure-threshold: warning
+          failure-threshold: error
+          config: .hadolint.yaml
 
       - name: Build image Docker
         id: build-image
