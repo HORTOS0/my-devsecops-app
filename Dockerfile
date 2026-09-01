@@ -11,7 +11,7 @@ FROM node:20-alpine AS production
 LABEL org.opencontainers.image.source='https://github.com/HORTOS0/my-devsecops-app' \
       org.opencontainers.image.version='1.0.0'
 
-RUN apk add --no-cache wget=1.25.0 && \
+RUN apk add --no-cache wget && \
     addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
