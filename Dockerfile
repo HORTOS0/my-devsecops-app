@@ -1,5 +1,5 @@
 # ── Stage 1 : Builder ────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-alpine3.23 AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci && \
@@ -15,6 +15,10 @@ RUN apk update && apk upgrade --no-cache && \
     apk add --no-cache wget && \
     addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
+
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/bin/npm /usr/local/bin/npx \
+    /opt/yarn-v1.22.22
 
 WORKDIR /app
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
