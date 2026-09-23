@@ -14,8 +14,8 @@ app.get('/health', (req, res) => {
 
 // Charger les certificats SSL (Let’s Encrypt par exemple)
 const options = {
-  key: fs.readFileSync('/etc/letsencrypt/live/ton-domaine.com/privkey.pem'),
-  cert: fs.readFileSync('/etc/letsencrypt/live/ton-domaine.com/fullchain.pem')
+  key: fs.readFileSync('/home/ali/certs/server.key'),
+  cert: fs.readFileSync('/home/ali/certs/server.crt')
 };
 
 // Serveur HTTPS
