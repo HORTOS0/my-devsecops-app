@@ -226,7 +226,7 @@ jobs:
             --network-interface-ids $ENI_ID \
             --query 'NetworkInterfaces[0].Association.PublicIp' \
             --output text)
-          echo "staging_url=http://$PUBLIC_IP:3000" >> $GITHUB_OUTPUT
+          echo "staging_url=http://my-app-nlb-dcfd5ca97de85403.elb.us-east-1.amazonaws.com" >> $GITHUB_OUTPUT
 
   dast-owasp-zap:
     name: "DAST — OWASP ZAP"
