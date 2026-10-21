@@ -249,8 +249,12 @@ jobs:
         with:
           target: 'http://my-app-alb-386968103.us-east-1.elb.amazonaws.com'
           fail_action: false
-          artifact_name: zap-report
-          path: zap-report.html
+
+      - name: Upload ZAP Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_html.html
           if-no-files-found: warn
 
   deploy-production:
