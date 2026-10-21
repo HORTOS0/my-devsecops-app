@@ -12,7 +12,7 @@
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:HORTOS0/my-devsecops-app:*"
+          "token.actions.githubusercontent.com:sub": "repo:HORTOS0/my-devsecops-app:ref:refs/heads/main"
         }
       }
     }
