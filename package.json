@@ -18,8 +18,8 @@
   },
   "devDependencies": {
     "eslint": "^8.50.0",
-    "jest": "^25.0.0",
-    "supertest": "^6.3.3"
+    "jest": "^30.5.2",
+    "supertest": "^6.3.4"
   },
   "jest": {
     "testEnvironment": "node",
