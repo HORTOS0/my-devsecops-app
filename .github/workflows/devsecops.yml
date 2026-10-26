@@ -253,7 +253,7 @@ jobs:
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         with:
-          name: zap-report
+          name: zap report
           path: report_html.html
           if-no-files-found: warn
 
