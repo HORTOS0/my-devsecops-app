@@ -281,7 +281,7 @@ jobs:
       - name: Recuperer task definition Production
         run: |
           aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_SERVICE }}-prod \
+            --task-definition ${{ env.ECS_SERVICE }} \
             --query taskDefinition \
             > task-definition-prod.json
 
@@ -297,7 +297,7 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def-prod.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}-prod
+          service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
           wait-for-minutes: 15
